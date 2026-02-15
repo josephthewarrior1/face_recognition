@@ -1,0 +1,35 @@
+# Firebase credentials - JANGAN PERNAH di-commit!
+firebase-config.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# MediaPipe model (gede, ga perlu di-repo)
+detector.tflite
+
+# Data lokal (ga perlu di-repo)
+face_data/
+attendance_records/
+unknown_faces/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
