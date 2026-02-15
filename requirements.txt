@@ -1,5 +1,24 @@
-opencv-python>=4.8.0
-opencv-contrib-python>=4.8.0
-numpy>=1.24.0
-pillow>=10.0.0
-openpyxl>=3.0.0
+# Face Attendance System - Firebase Edition
+# Requirements for creating .exe with PyInstaller
+
+# Core dependencies
+opencv-python==4.8.1.78
+opencv-contrib-python==4.8.1.78
+numpy==1.24.3
+mediapipe==0.10.32
+
+# Firebase
+firebase-admin==6.5.0
+
+# GUI
+Pillow==10.1.0
+
+# Excel export
+openpyxl==3.1.2
+
+# Web API (optional - for Flask version)
+flask==3.0.0
+flask-cors==4.0.0
+
+# For creating .exe
+pyinstaller==6.3.0

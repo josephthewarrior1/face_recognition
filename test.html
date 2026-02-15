@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Attendance - Real-time Recognition v2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #00ff41;
+            font-size: 3em;
+            text-shadow: 0 0 20px rgba(0, 255, 65, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #aaa;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .badge {
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-size: 0.9em;
+            font-weight: bold;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .badge-online { background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%); }
+        .badge-offline { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); }
+        .badge-active { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+        .badge-idle { background: linear-gradient(135deg, #616161 0%, #9bc5c3 100%); }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 2.5fr 1fr;
+            gap: 25px;
+        }
+
+        .card {
+            background: rgba(30, 30, 46, 0.9);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .card-title {
+            color: #00ff41;
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #00ff41;
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .btn-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 15px;
+            font-size: 15px;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .btn-blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-green { background: linear-gradient(135deg, #56ab2f 0%, #a8e063 100%); color: white; }
+        .btn-red { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; }
+        .btn-orange { background: linear-gradient(135deg, #f79d00 0%, #64f38c 100%); color: white; }
+        .btn-purple { background: linear-gradient(135deg, #c471f5 0%, #fa71cd 100%); color: white; }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #00ff41;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        .face-list {
+            max-height: 550px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .face-card {
+            background: linear-gradient(135deg, #232526 0%, #414345 100%);
+            padding: 15px;
+            margin-bottom: 12px;
+            border-radius: 10px;
+            border-left: 5px solid #00ff41;
+            transition: all 0.3s;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+        }
+
+        .face-card:hover {
+            transform: translateX(8px);
+            box-shadow: 0 5px 20px rgba(0,255,65,0.3);
+        }
+
+        .face-card.unknown {
+            border-left-color: #ff6b35;
+        }
+
+        .face-name {
+            color: #00ff41;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .face-card.unknown .face-name {
+            color: #ff6b35;
+        }
+
+        .face-info {
+            color: #aaa;
+            font-size: 0.9em;
+            margin: 4px 0;
+        }
+
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .conf-perfect { background: linear-gradient(90deg, #00ff41 0%, #00d4ff 100%); }
+        .conf-good { background: linear-gradient(90deg, #ffd700 0%, #ffed4e 100%); }
+        .conf-moderate { background: linear-gradient(90deg, #ff9500 0%, #ffb347 100%); }
+        .conf-unknown { background: linear-gradient(90deg, #ff6b35 0%, #ff8e53 100%); }
+
+        .log-console {
+            background: #0a0e27;
+            padding: 15px;
+            border-radius: 10px;
+            max-height: 180px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            margin-top: 15px;
+            border: 1px solid #1a1a2e;
+        }
+
+        .log-line {
+            margin: 3px 0;
+            padding: 3px;
+        }
+
+        .log-success { color: #00ff41; }
+        .log-error { color: #ff6b35; }
+        .log-info { color: #00d4ff; }
+        .log-warning { color: #ffd700; }
+
+        .action-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 15px;
+            margin-bottom: 10px;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #00ff41;
+            box-shadow: 0 0 10px rgba(0,255,65,0.3);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff41;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00d4ff;
+        }
+
+        @media (max-width: 1200px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 FACE ATTENDANCE SYSTEM</h1>
+            <p class="subtitle">Real-time Detection & Recognition • MediaPipe + LBPH • v2.0</p>
+        </header>
+
+        <div class="status-bar">
+            <span class="badge badge-offline" id="apiStatus">🔴 Backend Offline</span>
+            <span class="badge badge-idle" id="cameraStatus">📷 Camera Off</span>
+            <span class="badge badge-idle" id="detectionStatus">⏸️ Idle</span>
+        </div>
+
+        <div class="main-layout">
+            <!-- Left Column -->
+            <div>
+                <!-- Video Feed -->
+                <div class="card">
+                    <div class="video-container">
+                        <video id="video" autoplay muted playsinline></video>
+                        <canvas id="canvas"></canvas>
+                    </div>
+
+                    <div class="btn-grid">
+                        <button class="btn btn-blue" onclick="startCamera()">📷 Start Camera</button>
+                        <button class="btn btn-green" onclick="toggleDetection()" id="detectBtn" disabled>▶️ Start Detection</button>
+                        <button class="btn btn-orange" onclick="captureSnapshot()">📸 Snapshot</button>
+                        <button class="btn btn-red" onclick="clearAll()">🗑️ Clear</button>
+                    </div>
+                </div>
+
+                <!-- Statistics -->
+                <div class="card">
+                    <h3 class="card-title">📊 Live Statistics</h3>
+                    <div class="stats">
+                        <div class="stat-box">
+                            <div class="stat-number" id="totalFaces">0</div>
+                            <div class="stat-label">Total Faces</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number" id="recognizedFaces">0</div>
+                            <div class="stat-label">Recognized</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-number" id="unknownFaces">0</div>
+                            <div class="stat-label">Unknown</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Console Log -->
+                <div class="card">
+                    <h3 class="card-title">📋 Activity Log</h3>
+                    <div class="log-console" id="logConsole">
+                        <div class="log-line log-info">[SYSTEM] Initializing...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div>
+                <!-- Quick Actions -->
+                <div class="card">
+                    <h3 class="card-title">⚡ Quick Actions</h3>
+                    <div class="action-list">
+                        <button class="btn btn-blue" onclick="registerFace()">➕ Register New Face</button>
+                        <button class="btn btn-green" onclick="takeAttendance()">📋 Take Attendance</button>
+                        <button class="btn btn-purple" onclick="viewRegistered()">👥 View Registered</button>
+                        <button class="btn btn-orange" onclick="viewUnknown()">❓ Unknown Faces</button>
+                    </div>
+                </div>
+
+                <!-- Detected Faces -->
+                <div class="card">
+                    <h3 class="card-title">👤 Detected Faces (<span id="faceCount">0</span>)</h3>
+                    <div class="face-list" id="faceList">
+                        <p style="color: #666; text-align: center; padding: 30px;">
+                            No faces detected yet...<br><br>
+                            Start camera and detection to begin.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_URL = 'http://localhost:5000/api';
+        
+        // State
+        let video, canvas, ctx;
+        let cameraActive = false;
+        let isDetecting = false;
+        let detectionLoop = null;
+        let facesMap = new Map();
+
+        // Initialize
+        window.onload = async () => {
+            video = document.getElementById('video');
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
+
+            await checkBackend();
+            log('System ready! Click "Start Camera" to begin.', 'info');
+        };
+
+        // Check backend
+        async function checkBackend() {
+            try {
+                const res = await fetch(`${API_URL}/health`);
+                const data = await res.json();
+
+                if (data.status === 'healthy') {
+                    setBadge('apiStatus', '🟢 Backend Online', 'badge-online');
+                    log(`Backend connected! Method: ${data.mediapipe ? 'MediaPipe' : 'Haarcascade'}, Registered: ${data.registered_faces}`, 'success');
+                    return true;
+                }
+            } catch (err) {
+                setBadge('apiStatus', '🔴 Backend Offline', 'badge-offline');
+                log('Backend offline! Run: python flask_api_complete.py', 'error');
+                return false;
+            }
+        }
+
+        // Start camera
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: 'user' }
+                });
+
+                video.srcObject = stream;
+                
+                video.onloadedmetadata = () => {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    cameraActive = true;
+                    
+                    setBadge('cameraStatus', '📷 Camera On', 'badge-online');
+                    document.getElementById('detectBtn').disabled = false;
+                    log(`Camera started: ${video.videoWidth}x${video.videoHeight}`, 'success');
+                };
+            } catch (err) {
+                log(`Camera error: ${err.message}`, 'error');
+                alert('Cannot access camera!');
+            }
+        }
+
+        // Toggle detection
+        function toggleDetection() {
+            if (isDetecting) {
+                stopDetection();
+            } else {
+                startDetection();
+            }
+        }
+
+        // Start detection
+        async function startDetection() {
+            if (!cameraActive) {
+                alert('Start camera first!');
+                return;
+            }
+
+            const ok = await checkBackend();
+            if (!ok) {
+                alert('Backend offline!');
+                return;
+            }
+
+            isDetecting = true;
+            setBadge('detectionStatus', '🟢 Detecting', 'badge-active');
+            document.getElementById('detectBtn').innerHTML = '⏸️ Stop Detection';
+            
+            log('Real-time detection started (1 fps for accuracy)', 'info');
+
+            // Detection loop - 1000ms interval for best accuracy
+            detectionLoop = setInterval(performRecognition, 1000);
+        }
+
+        // Stop detection
+        function stopDetection() {
+            isDetecting = false;
+            
+            if (detectionLoop) {
+                clearInterval(detectionLoop);
+                detectionLoop = null;
+            }
+
+            setBadge('detectionStatus', '⏸️ Idle', 'badge-idle');
+            document.getElementById('detectBtn').innerHTML = '▶️ Start Detection';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            log('Detection stopped', 'info');
+        }
+
+        // Perform recognition using NEW /api/recognize endpoint
+        async function performRecognition() {
+            if (!isDetecting) return;
+
+            const imageData = captureFrame();
+            if (!imageData) return;
+
+            try {
+                const res = await fetch(`${API_URL}/recognize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        image: imageData,
+                        confidence_threshold: 70  // Same as backend
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // Update faces map
+                    facesMap.clear();
+                    data.faces.forEach((face, idx) => {
+                        const key = face.id || `unknown_${idx}`;
+                        facesMap.set(key, {
+                            ...face,
+                            time: new Date().toLocaleTimeString()
+                        });
+                    });
+
+                    // Update UI
+                    updateFaceList();
+                    drawBoxes(data.faces);
+                    updateStats(data);
+
+                    if (data.total_detected > 0) {
+                        log(`Detected: ${data.recognized} recognized, ${data.unknown} unknown`, 'success');
+                    }
+                }
+            } catch (err) {
+                log(`Recognition error: ${err.message}`, 'error');
+            }
+        }
+
+        // Capture snapshot
+        async function captureSnapshot() {
+            if (!cameraActive) {
+                alert('Start camera first!');
+                return;
+            }
+
+            const ok = await checkBackend();
+            if (!ok) return;
+
+            log('📸 Capturing snapshot...', 'info');
+
+            const imageData = captureFrame();
+            if (!imageData) return;
+
+            try {
+                const res = await fetch(`${API_URL}/recognize`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        image: imageData,
+                        confidence_threshold: 70
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    facesMap.clear();
+                    data.faces.forEach((face, idx) => {
+                        const key = face.id || `unknown_${idx}`;
+                        facesMap.set(key, {
+                            ...face,
+                            time: new Date().toLocaleTimeString()
+                        });
+                    });
+
+                    updateFaceList();
+                    drawBoxes(data.faces);
+                    updateStats(data);
+
+                    log(`✅ Snapshot: ${data.recognized} recognized, ${data.unknown} unknown`, 'success');
+                }
+            } catch (err) {
+                log(`Snapshot error: ${err.message}`, 'error');
+            }
+        }
+
+        // Draw detection boxes
+        function drawBoxes(faces) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            faces.forEach(face => {
+                const { x, y, w, h } = face.box;
+                
+                // Color based on confidence
+                let color;
+                if (face.name === 'Unknown') {
+                    color = '#ff6b35';
+                } else if (face.confidence_level === 'PERFECT') {
+                    color = '#00ff41';
+                } else if (face.confidence_level === 'GOOD') {
+                    color = '#ffd700';
+                } else {
+                    color = '#ff9500';
+                }
+
+                // Draw box
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x, y, w, h);
+
+                // Draw label
+                const label = face.name === 'Unknown' 
+                    ? 'UNKNOWN' 
+                    : `${face.name} (${face.confidence})`;
+                
+                ctx.font = 'bold 16px Arial';
+                const textWidth = ctx.measureText(label).width;
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(x, y - 30, textWidth + 10, 25);
+                
+                ctx.fillStyle = '#000';
+                ctx.fillText(label, x + 5, y - 10);
+            });
+        }
+
+        // Update face list
+        function updateFaceList() {
+            const container = document.getElementById('faceList');
+            const count = facesMap.size;
+            
+            document.getElementById('faceCount').textContent = count;
+
+            if (count === 0) {
+                container.innerHTML = '<p style="color: #666; text-align: center; padding: 30px;">No faces detected yet...</p>';
+                return;
+            }
+
+            let html = '';
+            facesMap.forEach((face, key) => {
+                const isUnknown = face.name === 'Unknown';
+                const emoji = isUnknown ? '❓' : '✅';
+                const cardClass = isUnknown ? 'unknown' : '';
+                
+                // Confidence percentage (inverted - lower is better)
+                const confPercent = Math.max(0, 100 - face.confidence);
+                
+                let barClass = 'conf-unknown';
+                if (face.confidence_level === 'PERFECT') barClass = 'conf-perfect';
+                else if (face.confidence_level === 'GOOD') barClass = 'conf-good';
+                else if (face.confidence_level === 'MODERATE') barClass = 'conf-moderate';
+
+                html += `
+                    <div class="face-card ${cardClass}">
+                        <div class="face-name">${emoji} ${face.name}</div>
+                        ${!isUnknown ? `<div class="face-info">ID: ${face.id}</div>` : ''}
+                        <div class="face-info">Confidence: ${face.confidence} (${face.confidence_level})</div>
+                        <div class="face-info">Method: ${face.method}</div>
+                        <div class="face-info">Time: ${face.time}</div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill ${barClass}" style="width: ${confPercent}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Update stats
+        function updateStats(data) {
+            document.getElementById('totalFaces').textContent = data.total_detected;
+            document.getElementById('recognizedFaces').textContent = data.recognized;
+            document.getElementById('unknownFaces').textContent = data.unknown;
+        }
+
+        // Register face
+        async function registerFace() {
+            if (!cameraActive) {
+                alert('Start camera first!');
+                return;
+            }
+
+            const name = prompt('Enter person name:');
+            if (!name) return;
+
+            const id = parseInt(prompt('Enter unique ID:'));
+            if (!id || isNaN(id)) return;
+
+            alert('Capturing 10 images for training...\nPress OK and look at camera.');
+
+            const images = [];
+            log(`Capturing for ${name}...`, 'info');
+
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 400));
+                const img = captureFrame();
+                if (img) {
+                    images.push(img);
+                    log(`${i + 1}/10 captured`, 'info');
+                }
+            }
+
+            if (images.length < 5) {
+                alert('Not enough images!');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, id, images })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    alert(`✅ ${name} registered!`);
+                    log(`✅ Registered: ${name} (ID: ${id})`, 'success');
+                } else {
+                    alert(`❌ Error: ${data.error}`);
+                    log(`Registration failed: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                alert(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // Take attendance
+        async function takeAttendance() {
+            if (!cameraActive) {
+                alert('Start camera first!');
+                return;
+            }
+
+            const subject = prompt('Enter subject/event:', 'General');
+            if (!subject) return;
+
+            const imageData = captureFrame();
+            if (!imageData) return;
+
+            log(`Taking attendance for: ${subject}`, 'info');
+
+            try {
+                const res = await fetch(`${API_URL}/attendance/take`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData, subject })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    let msg = `✅ Attendance Recorded!\n\nSubject: ${data.subject}\n`;
+                    msg += `Date: ${data.date}\nPresent: ${data.attendance.length}\n`;
+                    msg += `Unknown: ${data.unknown.length}\nFile: ${data.file}\n\n`;
+                    
+                    data.attendance.forEach(p => {
+                        msg += `✓ ${p.name} (${p.time})\n`;
+                    });
+
+                    alert(msg);
+                    log(`✅ Saved: ${data.file}`, 'success');
+                }
+            } catch (err) {
+                alert(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // View registered
+        async function viewRegistered() {
+            try {
+                const res = await fetch(`${API_URL}/registered`);
+                const data = await res.json();
+
+                if (data.success && data.count > 0) {
+                    let msg = `📋 Registered (${data.count})\n\n`;
+                    data.registered.forEach(p => {
+                        msg += `• ${p.name} (ID: ${p.id})\n`;
+                    });
+                    alert(msg);
+                } else {
+                    alert('No registered persons.');
+                }
+            } catch (err) {
+                alert(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // View unknown
+        async function viewUnknown() {
+            try {
+                const res = await fetch(`${API_URL}/unknown`);
+                const data = await res.json();
+
+                if (data.success && data.count > 0) {
+                    alert(`Found ${data.count} unknown photos.\nCheck unknown_faces folder.`);
+                } else {
+                    alert('No unknown faces saved.');
+                }
+            } catch (err) {
+                alert(`❌ Error: ${err.message}`);
+            }
+        }
+
+        // Clear all
+        function clearAll() {
+            facesMap.clear();
+            updateFaceList();
+            updateStats({ total_detected: 0, recognized: 0, unknown: 0 });
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            log('Cleared all detections', 'info');
+        }
+
+        // Capture frame
+        function captureFrame() {
+            if (!video.videoWidth) return null;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            return canvas.toDataURL('image/jpeg', 0.95);
+        }
+
+        // Set badge status
+        function setBadge(id, text, className) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = `badge ${className}`;
+        }
+
+        // Log message
+        function log(msg, type = 'info') {
+            const console = document.getElementById('logConsole');
+            const line = document.createElement('div');
+            line.className = `log-line log-${type}`;
+            
+            const time = new Date().toLocaleTimeString();
+            line.textContent = `[${time}] ${msg}`;
+            
+            console.appendChild(line);
+            console.scrollTop = console.scrollHeight;
+
+            while (console.children.length > 100) {
+                console.removeChild(console.firstChild);
+            }
+        }
+    </script>
+</body>
+</html>
