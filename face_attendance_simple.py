@@ -1,13 +1,13 @@
 """
 SIMPLE FACE ATTENDANCE SYSTEM
 Sistem absensi wajah yang gampang dipake
+MediaPipe 0.10.32 Compatible Version (NEW TASKS API)
 """
 
 import cv2
 import numpy as np
 import os
 import pickle
-import csv
 from datetime import datetime
 import tkinter as tk
 from tkinter import messagebox, simpledialog
@@ -27,20 +27,39 @@ class FaceAttendanceSystem:
         self.face_data_file = os.path.join(self.data_dir, "faces.pkl")
         self.names_file = os.path.join(self.data_dir, "names.pkl")
         
-        # Load MediaPipe face detector
-        print("Loading MediaPipe face detector...")
+        # Load MediaPipe face detector (NEW 0.10.32 API)
+        print("Loading MediaPipe 0.10.32 face detector...")
         try:
             import mediapipe as mp
-            self.mp_face_detection = mp.solutions.face_detection
-            self.face_detector = self.mp_face_detection.FaceDetection(
-                model_selection=1,  # 1 = full range
-                min_detection_confidence=0.85  # 85% - VERY STRICT!
+            from mediapipe.tasks import python
+            from mediapipe.tasks.python import vision
+            
+            # Download model if not exists
+            model_path = os.path.join(self.base_dir, 'detector.tflite')
+            if not os.path.exists(model_path):
+                print("⬇️  Downloading face detection model...")
+                import urllib.request
+                model_url = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite'
+                urllib.request.urlretrieve(model_url, model_path)
+                print("✅ Model downloaded!")
+            
+            # Create detector with NEW API
+            base_options = python.BaseOptions(model_asset_path=model_path)
+            options = vision.FaceDetectorOptions(
+                base_options=base_options,
+                min_detection_confidence=0.85  # 85% confidence
             )
-            print(f"✓ MediaPipe {mp.__version__} loaded! (Confidence: 85%)")
+            self.face_detector = vision.FaceDetector.create_from_options(options)
+            self.mp_image = mp.Image
+            self.mp_image_format = mp.ImageFormat
+            
+            print(f"✓ MediaPipe {mp.__version__} loaded! (NEW Tasks API - Confidence: 85%)")
+            self.using_mediapipe = True
         except Exception as e:
             print(f"MediaPipe load failed: {e}")
             print("Falling back to Haarcascade...")
             self.face_detector = None
+            self.using_mediapipe = False
         
         # Haarcascade as backup
         self.face_cascade = cv2.CascadeClassifier(
@@ -234,7 +253,7 @@ class FaceAttendanceSystem:
         reg_window.geometry("800x600")
         reg_window.configure(bg="#1e1e1e")
         
-        current_index = [0]  # Use list to make it mutable in nested function
+        current_index = [0]
         registered_count = [0]
         
         # Title
@@ -365,14 +384,10 @@ class FaceAttendanceSystem:
         def delete_photo():
             """Delete current photo without registering"""
             if messagebox.askyesno("Confirm Delete", "Hapus foto ini?\n(Foto akan dihapus permanent)"):
-                # Get current photo
                 photo_file = photo_files[current_index[0]]
                 photo_path = os.path.join(unknown_faces_dir, photo_file)
-                
-                # Delete photo
                 os.remove(photo_path)
                 print(f"🗑️  Deleted: {photo_file}")
-                
                 current_index[0] += 1
                 load_photo()
         
@@ -428,7 +443,7 @@ class FaceAttendanceSystem:
         )
         btn_close.grid(row=0, column=3, padx=10)
         
-        # Bind Enter key to save
+        # Bind Enter key
         name_entry.bind('<Return>', lambda e: save_and_next())
         
         # Load first photo
@@ -442,7 +457,6 @@ class FaceAttendanceSystem:
             with open(self.names_file, 'rb') as f:
                 self.names = pickle.load(f)
             
-            # Train recognizer with loaded data
             if len(face_data['faces']) > 0:
                 self.recognizer.train(face_data['faces'], np.array(face_data['labels']))
                 print(f"✅ Loaded {len(self.names)} registered faces")
@@ -465,13 +479,12 @@ class FaceAttendanceSystem:
             messagebox.showerror("Error", "Camera tidak bisa dibuka!")
             return False
         
-        # Set camera properties for better detection
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         
         faces_collected = []
         count = 0
-        max_samples = 30  # 30 foto cukup
+        max_samples = 30
         auto_capture_mode = False
         frame_skip = 0
         
@@ -484,21 +497,18 @@ class FaceAttendanceSystem:
                 break
             
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            # More sensitive detection parameters
             faces = self.face_cascade.detectMultiScale(
                 gray, 
-                scaleFactor=1.1,  # Lebih sensitif
-                minNeighbors=4,    # Lebih sensitif
-                minSize=(80, 80)   # Minimum face size
+                scaleFactor=1.1,
+                minNeighbors=4,
+                minSize=(80, 80)
             )
             
-            # Draw face rectangles
             for (x, y, w, h) in faces:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 3)
                 cv2.putText(frame, f"Wajah Terdeteksi!", (x, y-10),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             
-            # Display instructions
             mode_text = "AUTO MODE" if auto_capture_mode else "MANUAL MODE"
             cv2.putText(frame, mode_text, (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
@@ -507,7 +517,6 @@ class FaceAttendanceSystem:
             cv2.putText(frame, "SPACE=Capture | A=Auto | ESC=Batal", (10, 90),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
-            # Status message
             if len(faces) == 0:
                 cv2.putText(frame, "WAJAH TIDAK TERDETEKSI!", (10, 450),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
@@ -519,24 +528,20 @@ class FaceAttendanceSystem:
             
             key = cv2.waitKey(1) & 0xFF
             
-            # Toggle auto-capture mode
             if key == ord('a') or key == ord('A'):
                 auto_capture_mode = not auto_capture_mode
                 print(f"{'✓ AUTO MODE AKTIF' if auto_capture_mode else '✗ AUTO MODE OFF'}")
             
-            # Manual capture with SPACE
             if key == 32 and len(faces) > 0:
                 x, y, w, h = faces[0]
                 face_roi = gray[y:y+h, x:x+w]
                 faces_collected.append(face_roi)
                 count += 1
                 print(f"✓ Foto {count}/{max_samples} captured (MANUAL)")
-                cv2.waitKey(100)  # Small delay to show feedback
+                cv2.waitKey(100)
             
-            # Auto-capture mode
             elif auto_capture_mode and len(faces) > 0:
                 frame_skip += 1
-                # Capture every 5 frames (slower capture)
                 if frame_skip >= 5:
                     x, y, w, h = faces[0]
                     face_roi = gray[y:y+h, x:x+w]
@@ -546,7 +551,6 @@ class FaceAttendanceSystem:
                     frame_skip = 0
                     cv2.waitKey(100)
             
-            # ESC to cancel
             elif key == 27:
                 cap.release()
                 cv2.destroyAllWindows()
@@ -559,7 +563,6 @@ class FaceAttendanceSystem:
             messagebox.showwarning("Warning", "Foto terlalu sedikit! Minimal 10 foto.")
             return False
         
-        # Load existing data
         if os.path.exists(self.face_data_file):
             with open(self.face_data_file, 'rb') as f:
                 existing_data = pickle.load(f)
@@ -569,44 +572,37 @@ class FaceAttendanceSystem:
             all_faces = faces_collected
             all_labels = [person_id] * len(faces_collected)
         
-        # Save name mapping
         self.names[person_id] = name
-        
-        # Train recognizer
         self.recognizer.train(all_faces, np.array(all_labels))
-        
-        # Save data
         self.save_data(all_faces, all_labels)
         
         messagebox.showinfo("Success", f"✅ {name} berhasil didaftarkan!\nTotal foto: {len(faces_collected)}")
         return True
     
     def take_attendance(self, subject="General"):
-        """Take attendance - unknown faces are auto-saved for later registration"""
+        """Take attendance with NEW MediaPipe 0.10.32 API"""
         cap = cv2.VideoCapture(0)
         if not cap.isOpened():
             messagebox.showerror("Error", "Camera tidak bisa dibuka!")
             return
         
-        # Create attendance file - LANGSUNG EXCEL!
         today = datetime.now().strftime("%Y-%m-%d")
         time_now = datetime.now().strftime("%H-%M-%S")
         filename = f"{subject}_{today}_{time_now}.xlsx"
         filepath = os.path.join(self.attendance_dir, filename)
         
-        # Folder untuk unknown faces
         unknown_faces_dir = os.path.join(self.base_dir, "unknown_faces")
         os.makedirs(unknown_faces_dir, exist_ok=True)
         
         attendance_list = {}
-        saved_unknowns = {}  # Track saved unknown photos
+        saved_unknowns = {}
         unknown_photo_count = 0
         
         print(f"\n📋 Mengambil absensi: {subject}")
         print("Tekan ESC untuk selesai")
         print(f"Unknown faces akan auto-save ke: {unknown_faces_dir}")
         
-        # Import openpyxl untuk Excel
+        # Import openpyxl
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -642,12 +638,12 @@ class FaceAttendanceSystem:
             cell.border = border
         
         # Set column widths
-        ws.column_dimensions['A'].width = 10  # No
-        ws.column_dimensions['B'].width = 15  # ID
-        ws.column_dimensions['C'].width = 30  # Nama
-        ws.column_dimensions['D'].width = 15  # Waktu
-        ws.column_dimensions['E'].width = 35  # Subject
-        ws.column_dimensions['F'].width = 20  # Tanggal
+        ws.column_dimensions['A'].width = 10
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 35
+        ws.column_dimensions['F'].width = 20
         
         while True:
             ret, frame = cap.read()
@@ -657,30 +653,39 @@ class FaceAttendanceSystem:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces_list = []
             
-            # Use MediaPipe if available, otherwise Haarcascade
-            if self.face_detector:
-                # MediaPipe detection
+            # Use MediaPipe NEW API if available
+            if self.using_mediapipe and self.face_detector:
+                # Convert to MediaPipe Image format (NEW API)
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.face_detector.process(frame_rgb)
+                mp_image = self.mp_image(image_format=self.mp_image_format.SRGB, data=frame_rgb)
                 
-                if results.detections:
-                    for detection in results.detections:
-                        bboxC = detection.location_data.relative_bounding_box
-                        ih, iw, _ = frame.shape
+                # Detect faces (NEW API)
+                detection_result = self.face_detector.detect(mp_image)
+                
+                if detection_result.detections:
+                    for detection in detection_result.detections:
+                        # Get bounding box (NEW API format)
+                        bbox = detection.bounding_box
                         
-                        x = max(0, int(bboxC.xmin * iw))
-                        y = max(0, int(bboxC.ymin * ih))
-                        w = min(int(bboxC.width * iw), iw - x)
-                        h = min(int(bboxC.height * ih), ih - y)
+                        x = int(bbox.origin_x)
+                        y = int(bbox.origin_y)
+                        w = int(bbox.width)
+                        h = int(bbox.height)
                         
-                        confidence_score = detection.score[0]
+                        # Ensure coordinates are within frame
+                        x = max(0, x)
+                        y = max(0, y)
+                        w = min(w, frame.shape[1] - x)
+                        h = min(h, frame.shape[0] - y)
                         
-                        # MediaPipe AI quality filter - VERY STRICT (85%)
+                        # Get confidence score
+                        confidence_score = detection.categories[0].score if detection.categories else 0.85
+                        
                         if confidence_score >= 0.85:
                             faces_list.append({
                                 'box': (x, y, w, h),
                                 'confidence': confidence_score,
-                                'method': 'MediaPipe'
+                                'method': 'MediaPipe 0.10.32'
                             })
             else:
                 # Haarcascade fallback
@@ -693,13 +698,11 @@ class FaceAttendanceSystem:
                 )
                 
                 for (x, y, w, h) in faces:
-                    # Variance check
                     face_roi_check = gray[y:y+h, x:x+w]
                     variance = np.var(face_roi_check)
                     if variance < 150:
                         continue
                     
-                    # Aspect ratio check
                     aspect_ratio = w / h
                     if aspect_ratio < 0.7 or aspect_ratio > 1.3:
                         continue
@@ -722,7 +725,6 @@ class FaceAttendanceSystem:
                 confidence = 100
                 is_unknown = True
                 
-                # Try to recognize if we have trained data
                 if self.names and face_roi.size > 0:
                     try:
                         person_id, confidence = self.recognizer.predict(face_roi)
@@ -732,19 +734,17 @@ class FaceAttendanceSystem:
                         pass
                 
                 if not is_unknown:
-                    # Known person - AUTO DETECT
+                    # Known person
                     name = self.names.get(person_id, "Unknown")
                     color = (0, 255, 0)
                     text = f"{name} ({int(confidence)})"
                     
-                    # Record attendance (once per person)
                     if person_id not in attendance_list:
                         attendance_list[person_id] = {
                             'name': name,
                             'time': datetime.now().strftime("%H:%M:%S")
                         }
                         
-                        # Write to Excel immediately
                         row_number = len(attendance_list) + 1
                         current_time = datetime.now().strftime("%H:%M:%S")
                         
@@ -755,7 +755,6 @@ class FaceAttendanceSystem:
                         ws.cell(row=row_number, column=5, value=subject)
                         ws.cell(row=row_number, column=6, value=today)
                         
-                        # Apply styling
                         for col_num in range(1, 7):
                             cell = ws.cell(row=row_number, column=col_num)
                             cell.border = border
@@ -771,34 +770,26 @@ class FaceAttendanceSystem:
                     cv2.putText(frame, text, (x, y-10),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 else:
-                    # Unknown person - AUTO SAVE FOTO!
-                    # Better duplicate detection using center position
-                    
+                    # Unknown person - AUTO SAVE
                     center_x = x + w // 2
                     center_y = y + h // 2
-                    temp_id = f"{center_x//100}_{center_y//100}"  # Larger grid to prevent duplicates
+                    temp_id = f"{center_x//100}_{center_y//100}"
                     
-                    # Check if this face is too close to already saved unknowns
                     is_duplicate = False
                     for saved_id, saved_data in saved_unknowns.items():
-                        # Calculate distance from saved positions
                         if 'center' in saved_data:
                             saved_cx, saved_cy = saved_data['center']
                             distance = np.sqrt((center_x - saved_cx)**2 + (center_y - saved_cy)**2)
-                            
-                            # If within 150 pixels, consider it the same person
                             if distance < 150:
                                 is_duplicate = True
                                 break
                     
                     if temp_id not in saved_unknowns and not is_duplicate:
-                        # All checks passed - save photo
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         unknown_photo_count += 1
                         photo_filename = f"unknown_{timestamp}_{unknown_photo_count}.jpg"
                         photo_path = os.path.join(unknown_faces_dir, photo_filename)
                         
-                        # Save face image with some padding
                         padding = 20
                         y1 = max(0, y - padding)
                         y2 = min(frame.shape[0], y + h + padding)
@@ -811,13 +802,12 @@ class FaceAttendanceSystem:
                         saved_unknowns[temp_id] = {
                             'photo_path': photo_path,
                             'timestamp': timestamp,
-                            'center': (center_x, center_y)  # Store center for duplicate check
+                            'center': (center_x, center_y)
                         }
                         
                         print(f"📸 Unknown face saved: {photo_filename} ({detection_method} - confidence: {confidence_score:.2f})")
                     
-                    # Show orange box
-                    color = (0, 165, 255)  # Orange
+                    color = (0, 165, 255)
                     text = f"UNKNOWN ({int(confidence_score*100)}%)"
                     
                     cv2.rectangle(frame, (x, y), (x+w, y+h), color, 3)
@@ -827,7 +817,7 @@ class FaceAttendanceSystem:
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             
             # Display info
-            detection_mode = "MediaPipe" if self.face_detector else "Haarcascade"
+            detection_mode = "MediaPipe 0.10.32" if self.using_mediapipe else "Haarcascade"
             cv2.putText(frame, f"Subject: {subject} [{detection_mode}]", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             cv2.putText(frame, f"Faces detected: {len(faces_list)}", (10, 60),
@@ -839,28 +829,26 @@ class FaceAttendanceSystem:
             cv2.putText(frame, "ESC = Selesai", (10, 150),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
             
-            # Show list of present people on screen
+            # Show present people
             y_offset = 180
             cv2.putText(frame, "HADIR:", (10, y_offset),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
             for idx, (pid, info) in enumerate(attendance_list.items()):
-                if idx < 5:  # Show max 5 names on screen
+                if idx < 5:
                     y_offset += 25
                     cv2.putText(frame, f"- {info['name']}", (10, y_offset),
                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
             
             cv2.imshow('Taking Attendance', frame)
             
-            if cv2.waitKey(1) & 0xFF == 27:  # ESC
+            if cv2.waitKey(1) & 0xFF == 27:
                 break
         
         cap.release()
         cv2.destroyAllWindows()
         
-        # Final save
         wb.save(filepath)
         
-        # Show summary
         summary = f"📊 Attendance Summary\n\n"
         summary += f"Subject: {subject}\n"
         summary += f"Date: {today}\n"
@@ -878,14 +866,13 @@ class AttendanceGUI:
     def __init__(self):
         self.system = FaceAttendanceSystem()
         self.window = tk.Tk()
-        self.window.title("Simple Face Attendance System")
+        self.window.title("Simple Face Attendance System v0.10.32")
         self.window.geometry("500x400")
         self.window.configure(bg="#1e1e1e")
         
         self.create_widgets()
     
     def create_widgets(self):
-        # Title
         title = tk.Label(
             self.window,
             text="📸 FACE ATTENDANCE",
@@ -897,18 +884,16 @@ class AttendanceGUI:
         
         subtitle = tk.Label(
             self.window,
-            text="Simple & Easy Attendance System",
+            text="MediaPipe 0.10.32 | NEW Tasks API",
             font=("Arial", 12),
             bg="#1e1e1e",
             fg="#cccccc"
         )
         subtitle.pack(pady=5)
         
-        # Button frame
         btn_frame = tk.Frame(self.window, bg="#1e1e1e")
         btn_frame.pack(pady=40)
         
-        # Register button
         btn_register = tk.Button(
             btn_frame,
             text="➕ Register New Face",
@@ -922,7 +907,6 @@ class AttendanceGUI:
         )
         btn_register.grid(row=0, column=0, pady=10, padx=10)
         
-        # Attendance button
         btn_attendance = tk.Button(
             btn_frame,
             text="📋 Take Attendance",
@@ -936,7 +920,6 @@ class AttendanceGUI:
         )
         btn_attendance.grid(row=1, column=0, pady=10, padx=10)
         
-        # View records button
         btn_view = tk.Button(
             btn_frame,
             text="📂 Open Records Folder",
@@ -950,7 +933,6 @@ class AttendanceGUI:
         )
         btn_view.grid(row=2, column=0, pady=10, padx=10)
         
-        # Register unknown button
         btn_register_unknown = tk.Button(
             btn_frame,
             text="👤 Register Unknown Faces",
@@ -964,7 +946,6 @@ class AttendanceGUI:
         )
         btn_register_unknown.grid(row=3, column=0, pady=10, padx=10)
         
-        # Open unknown folder button
         btn_open_unknown = tk.Button(
             btn_frame,
             text="📸 Open Unknown Photos",
@@ -978,7 +959,6 @@ class AttendanceGUI:
         )
         btn_open_unknown.grid(row=4, column=0, pady=10, padx=10)
         
-        # Delete all unknown button
         btn_delete_all = tk.Button(
             btn_frame,
             text="🗑️ Delete All Unknown",
@@ -992,7 +972,6 @@ class AttendanceGUI:
         )
         btn_delete_all.grid(row=5, column=0, pady=10, padx=10)
         
-        # Delete registered person button (NEW!)
         btn_delete_registered = tk.Button(
             btn_frame,
             text="👤🗑️ Delete Registered",
@@ -1006,7 +985,6 @@ class AttendanceGUI:
         )
         btn_delete_registered.grid(row=6, column=0, pady=10, padx=10)
         
-        # Exit button
         btn_exit = tk.Button(
             btn_frame,
             text="❌ Exit",
@@ -1020,7 +998,6 @@ class AttendanceGUI:
         )
         btn_exit.grid(row=7, column=0, pady=10, padx=10)
         
-        # Info label
         info = tk.Label(
             self.window,
             text=f"Registered: {len(self.system.names)} people",
@@ -1031,25 +1008,20 @@ class AttendanceGUI:
         info.pack(side="bottom", pady=10)
     
     def register_new_face(self):
-        # Get name
         name = simpledialog.askstring("Register", "Masukkan Nama:")
         if not name:
             return
         
-        # Get ID
         person_id = simpledialog.askinteger("Register", "Masukkan ID (angka):")
         if not person_id:
             return
         
-        # Check if ID exists
         if person_id in self.system.names:
             messagebox.showwarning("Warning", f"ID {person_id} sudah terdaftar untuk: {self.system.names[person_id]}")
             return
         
-        # Register
         self.system.register_face(name, person_id)
         
-        # Update info
         self.window.destroy()
         self.__init__()
     
@@ -1063,7 +1035,6 @@ class AttendanceGUI:
         subprocess.Popen(f'explorer "{self.system.attendance_dir}"')
     
     def open_unknown_folder(self):
-        """Open unknown faces folder"""
         import subprocess
         unknown_dir = os.path.join(self.system.base_dir, "unknown_faces")
         if os.path.exists(unknown_dir):
@@ -1072,7 +1043,6 @@ class AttendanceGUI:
             messagebox.showinfo("Info", "Folder unknown_faces belum ada!\nBelum ada foto unknown yang tersimpan.")
     
     def delete_all_unknown(self):
-        """Delete all unknown photos"""
         unknown_dir = os.path.join(self.system.base_dir, "unknown_faces")
         
         if not os.path.exists(unknown_dir):
@@ -1097,11 +1067,9 @@ class AttendanceGUI:
             print(f"🗑️  Deleted {len(photo_files)} unknown photos")
     
     def delete_registered(self):
-        """Open delete registered person window"""
         self.system.delete_registered_person()
     
     def register_unknowns(self):
-        """Open unknown face registration window"""
         self.system.register_unknown_faces()
     
     def run(self):
@@ -1111,6 +1079,7 @@ class AttendanceGUI:
 if __name__ == "__main__":
     print("=" * 50)
     print("SIMPLE FACE ATTENDANCE SYSTEM")
+    print("MediaPipe 0.10.32 - NEW Tasks API")
     print("=" * 50)
     app = AttendanceGUI()
     app.run()
